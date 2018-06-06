@@ -1,1 +1,2 @@
 # White-Wine-Quality
+In this project, the data contains the data of 4,900 white wines with their corresponding 10 different chemical components and their rated quality score. I used R to analyze the relationship between each variables and how they affect the quality of white wines. In the end, I develop a decision tree algorithm to predict if the whie wine is "bad", "average" or "good" based on its alcohol content. 
