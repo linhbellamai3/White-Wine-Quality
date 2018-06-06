@@ -14,6 +14,11 @@ library(gridExtra)
 library(dplyr)
 library(rpart)
 library(rpart.plot)
+library(purrr)
+library(tidyr)
+library(RColorBrewer)
+library(ggpubr)
+library(reshape2)
 # Notice that the parameter "echo" was set to FALSE for this code chunk. This
 # prevents the code from displaying in the knitted HTML output. You should set
 # echo=FALSE for all code chunks in your file, unless it makes sense for your
@@ -50,8 +55,8 @@ summary(ww)
 The histogram for different qualities. 
 
 ```{r echo=FALSE, Univariate_Plot3}
-qplot(x=quality, data = ww, binwidth = 1)+
-  scale_x_continuous(breaks = seq(0,10,1))
+ggplot(aes(x=factor(quality)), data = ww)+
+  geom_bar()
 ```
 
 The histograms shows that most of the white wines are rated from 5-7. Quality 9 
@@ -83,16 +88,17 @@ The histogram for residual sugar and density
 
 ```{r echo=FALSE, Univariate_Plot6}
 p4 <- qplot(x=residual.sugar, data = ww, binwidth = 0.5)
-p5 <- qplot(x=residual.sugar, data = ww, binwidth = 0.1)+
-  scale_x_continuous(limits = c(0, 20), breaks = seq(0, 20, 1))
+p5 <- qplot(x=residual.sugar, data = ww, binwidth =0.05)+
+  coord_cartesian(xlim=c(0.6, 20))+
+  scale_x_log10(breaks = seq(0,20,2))
 p6 <- qplot(x = density, data = ww, binwidth = 0.001)+
   scale_x_continuous(breaks = seq(0.97, 1.04, 0.005))
 grid.arrange(p4, p5, p6, ncol = 1)
 ```
 
-The histogram for residual sugar is skewed to the left significantly. The 
-zoomed-in histogram shows that most of white wines having residual sugar less
-than 2g/dm^3. For the density, most of the white wines have density of 
+The histogram for residual sugar is skewed to the left significantly with most
+of white wines have density less than 2 g/dm^3. The log10 plot of residual sugar 
+shows that residual is dual-modal. For the density, most of the white wines have density of 
 0.992-0.995 g/cm^3. The density looks normally distributed with some outliers 
 to the left.
 
@@ -309,6 +315,20 @@ white wines gets quality 9 and it also has more counts for quality 7 and 8
 compared to 
 low-medium alcohol.
 
+I want to see the boxplots for all the attributes because I saw a lot of 
+imbalance and skewness in their histograms.
+
+```{r echo=FALSE, Univariate_Plot}
+subset(ww, select = -c(X)) %>%
+  keep(is.numeric) %>%
+  gather() %>%
+  ggplot(aes(x='', y= value)) +
+    facet_wrap(~key, scales = "free")+
+    geom_boxplot()
+```
+
+I can see that most of the variables have tails of outliers, except for alcohol. Most of the outliers stay on the higher value sides, which explains why most of the histograms are skewed to the left side. Chlorides has the worst case of outliers, with the biggest outlier to be about 10 times of its IQR. Density, fixed acidity, free sulfur dioxide and residual sugar all have a significant outliers as their maximum, which may affect their correlation with other variables. 
+
 # Univariate Analysis
 
 ###What is the structure of your dataset?
@@ -327,6 +347,7 @@ Other observations:
 *All sweet wines score a quality 6.
 *All wines with quality 9 are medium alcohol concentration.
 *Only wine with pH 3.1-3.5 got quality 9
+*Most of the variables are skewed to the left
 
 ###What is/are the main feature(s) of interest in your dataset?
 
@@ -380,9 +401,16 @@ levels.
 
 # Bivariate Plots Section
 
-```{r echo=FALSE, Bivariate_Plot1}
-wine <- ww[, 2:13]
-cor(wine)
+Because X is just the ID for each wines, I decide to exclude it from the correlation plot between quality and other variables. I pick Spearman correlation since quality is an ordinal variable.
+
+```{r Correlation_coeff, echo=FALSE, fig.height=10, fig.width=10, message=FALSE, warning=FALSE}
+wine_cor_data <- subset(ww, select = -c(X,sugar.bucket,pH.bucket,alcohol.bucket))
+ggcorr(wine_cor_data,
+       method = c("all.obs", "spearman"),
+       nbreaks = 4, palette = "PuOr", label = TRUE,
+       name = "Spearman correlation coeff.(rho)",
+       hjust = 0.8, angle = -70, size = 3)+
+  ggtitle("Spearman Correlation coefficient Matrix")
 ```
 
 The density is correlated strongly with residual sugar and alcohol content. pH 
@@ -390,14 +418,21 @@ and fixed acidity is correlated weakly with each other. For quality, alcohol
 and quality is correlated weakly. The reason for that may be that the 
 medium-high alcohol content don't get any quality 9.
 
-I use a sample 10,0000 to create the correlation plot.
+Here are the scatterplot to present the relationship between each variables:
 
-```{r echo=FALSE, Bivariate_Plot2}
-set.seed(20022012)
-whitewine_samp <- wine[sample(1:length(ww$quality), 1000),]
-ggpairs(whitewine_samp,
-        lower = list(continuous = wrap("points", shape = I('.'))),
-        upper = list(combo = wrap("box", outlier.shape = I('.'))))
+```{r Correlation_Pairs, echo=FALSE, fig.height=10, fig.width=10, message=FALSE, warning=FALSE}
+cor_plot <- ggscatmat(subset(wine_cor_data, select = -c(quality))) + theme_grey(base_size = 5)
+wine_cor_data.m <- melt(wine_cor_data, id.vars = 'quality',
+                        measure.vars = c('fixed.acidity',
+                                         'volatile.acidity',
+                                         'citric.acid',
+                                         'residual.sugar',
+                                         'chlorides','free.sulfur.dioxide', 'total.sulfur.dioxide', 'density', 'pH', 'sulphates', 'alcohol'))
+qual_plot <- ggplot(wine_cor_data.m, aes(x=factor(quality), y=value))+
+  geom_boxplot()+
+  facet_wrap(~variable, scales = "free")+
+  xlab("Quality")
+grid.arrange(cor_plot, qual_plot, ncol = 1)
 ```
 
 Since the density seems to correlate with residual sugar and alcohol, I want to 
@@ -407,9 +442,10 @@ The density vs residual sugar
 
 ```{r echo=FALSE, Bivariate_Plot3}
 ggplot(aes(x=residual.sugar, y=density), data=ww)+
-  geom_point()+
+  geom_jitter(alpha = 1/40)+
   geom_smooth(method='lm', color = 'red')
 ```
+
 ```{r echo=FALSE, Bivariate_Plot4}
 m1 <- lm(I(density) ~ I(residual.sugar), data = ww)
 summary(m1)
@@ -419,7 +455,7 @@ Density vs alcohol content
 
 ```{r echo=FALSE, Bivariate_Plot5}
 ggplot(aes(x=alcohol, y=density), data=ww)+
-  geom_point()+
+  geom_jitter(alpha = 1/20)+
   geom_smooth(method='lm', color = 'red')
 ```
 
@@ -455,7 +491,7 @@ The density vs residual sugar
 
 ```{r echo=FALSE, Bivariate_Plot9}
 ggplot(aes(x=residual.sugar, y=alcohol), data=ww)+
-  geom_point()+
+  geom_jitter(alpha = 1/15)+
   geom_smooth(method='lm', color = 'red')
 ```
 
@@ -464,21 +500,25 @@ m5 <- lm(I(residual.sugar) ~ I(alcohol), data = ww)
 summary(m5)
 ```
 
+The plot and summary shows that the
+
 Now I want to see alcohol and quality relationship.
 
 ```{r echo=FALSE, Bivariate_Plot11}
-ggplot(aes(x=alcohol, y=quality), data=ww)+
-  geom_jitter()+
-  geom_smooth(method='lm', color = 'red')
+ggplot(aes(x=factor(quality), y=alcohol), data=ww)+
+  geom_jitter(alpha = 1/10)+
+  geom_boxplot(alpha = 1/10, color = 'blue')+
+  stat_summary(fun.y='mean', geom = 'point', color = 'red')+
+  labs(x = 'Quality (score between 3 and 9)',
+       y = 'Alcohol (% by volume)',
+       title = 'Boxplot of alcohol across qualities')
+
 ```
 
-```{r echo=FALSE, Bivariate_Plot12}
-m6 <- lm(I(alcohol) ~ I(quality), data = ww)
-summary(m6)
-```
 
-From the graph, the regression correlation between alcohol and quality is weak, 
-so I will explore their relationship another way, using boxplot.
+From the graph, it looks like both the mean and mode of alcohol go down for quality 3 to 5 and then increase after that. 
+
+so I will explore their relationship another way, using boxplot between alcohol bucket and quality
 
 ```{r echo=FALSE, Bivariate_Plot13}
 ggplot(aes(x=alcohol.bucket, y=quality), data=ww)+
@@ -499,44 +539,34 @@ I want to explore and see the relationship between alcohol and quality in each
 alcohol bucket. 
 
 ```{r echo=FALSE, Bivariate_Plot15}
-ggplot(aes(x=alcohol, y=quality), data=ww)+
-  geom_jitter(alpha = 1/5)+
-  geom_smooth(method='lm', color = 'red')+
-  facet_wrap(~alcohol.bucket, scales = 'free')
+ggplot(aes(x=factor(quality), y=alcohol), data=ww)+
+  geom_boxplot(alpha = 1/10, color = 'blue')+
+  stat_summary(fun.y='mean', geom = 'point', color = 'red')+
+  labs(x = 'Quality (score between 3 and 9)',
+       y = 'Alcohol (% by volume)',
+       title = 'Boxplot of alcohol across qualities')+
+  facet_wrap(~alcohol.bucket, scales = "free")
 ```
 
-```{r echo=FALSE, Bivariate_Plot16}
-
-m7 <- lm(I(alcohol) ~ I(quality), 
-         data = subset(ww, alcohol.bucket == "Medium-High"))
-summary(m7)
-```
-
-Based on the plots, even when I group the data set based on the alcohol bucket, 
-the correlation between alcohol and quality doesn't seem really strong based on
-the R^2 value. However, alcohol is the variables that correlates the strongest
-with quality so far.
+Based on the plots, only medium-high-alcohol-content white wines shows a trend
+that as higher alcohol has higer quality. However, the other catergories don't 
+show any significant trend like Medium-High categories
 
 Now I want to see the relationship between residual sugar and quality.
 
 ```{r echo=FALSE, Bivariate_Plot17}
-ggplot(aes(x=residual.sugar, y=quality), data=ww)+
-  geom_point()+
-  geom_smooth(method='lm', color = 'red')
+ggplot(aes(x=factor(quality), y=residual.sugar), data=ww)+
+  geom_jitter(alpha = 1/10)+
+  geom_boxplot(alpha = 1/10, color = 'blue')+
+  stat_summary(fun.y='mean', geom = 'point', color = 'red')+
+  labs(x = 'Quality (score between 3 and 9)',
+       y = 'Residual sugar (g/dm^3)',
+       title = 'Boxplot of residual sugar across qualities')+
+  scale_y_log10()
 ```
 
-Since the quality is integer so the graph looks like the series of lines. I want 
-to create a bit of noise with jittery but also reduces the noise a bit with 
-alpha to see the pattern better.
-
-```{r echo=FALSE, Bivariate_Plot18}
-ggplot(aes(x=residual.sugar, y=quality), data=ww)+
-  geom_jitter(alpha = 1/5)+
-  geom_smooth(method='lm', color = 'red')
-```
-
-The graph shows that there are no linear relationship between residual sugar 
-and quality. Let's explore their relationship with boxplot.
+The graph shows that there are no relationship between residual sugar 
+and quality. Let's explore their relationship with boxplot with sugar bucket.
 
 ```{r echo=FALSE, Bivariate_Plot19}
 ggplot(aes(x=sugar.bucket, y=quality), data=ww)+
@@ -556,26 +586,39 @@ Let's explore more variables that have a small correlation with quality such as
 volatile acidity, chlorides, and density.
 
 ```{r echo=FALSE, Bivariate_Plot21}
-ggplot(aes(x=volatile.acidity, y=quality), data=ww)+
-  geom_jitter(alpha = 1/5)+
-  geom_smooth(method='lm', color = 'red')
+ggplot(aes(x=factor(quality), volatile.acidity), data=ww)+
+  geom_jitter(alpha = 1/10)+
+  geom_boxplot(alpha = 1/10, color = 'blue')+
+  stat_summary(fun.y='mean', geom = 'point', color = 'red')+
+  labs(x = 'Quality (score between 3 and 9)',
+       y = 'Acetic Acid (g / dm^3)',
+       title = 'Boxplot of Acetic Acid across qualities')
 ```
 
 ```{r echo=FALSE, Bivariate_Plot22}
-ggplot(aes(x=chlorides, y=quality), data=ww)+
-  geom_jitter(alpha = 1/5)+
-  geom_smooth(method='lm', color = 'red')
+ggplot(aes(x=factor(quality), y=chlorides), data=ww)+
+  geom_jitter(alpha = 1/10)+
+  geom_boxplot(alpha = 1/10, color = 'blue')+
+  stat_summary(fun.y='mean', geom = 'point', color = 'red')+
+  labs(x = 'Quality (score between 3 and 9)',
+       y = 'Chlorides (g / dm^3)',
+       title = 'Boxplot of Chlorides across qualities')
 ```
 
 ```{r echo=FALSE, Bivariate_Plot23}
-ggplot(aes(x=density, y=quality), data=ww)+
-  geom_jitter(alpha = 1/5)+
-  geom_smooth(method='lm', color = 'red')
+ggplot(aes(x=factor(quality), y = density), data=ww)+
+  geom_jitter(alpha = 1/10)+
+  geom_boxplot(alpha = 1/10, color = 'blue')+
+  stat_summary(fun.y='mean', geom = 'point', color = 'red')+
+  labs(x = 'Quality (score between 3 and 9)',
+       y = 'Density (g / dm^3)',
+       title = 'Boxplot of density across qualities')
 ```
 
 I can see clearly that quality is not correlated strongly with volatile acidity,
-chlorides, or density.The data was too clustered around quality of 5-7 due to 
-the unbalanced distribution of quality.
+chlorides, or density.However, density has a really similar trend as alcohol.
+The data was too clustered around quality of 5-6 due to the unbalanced 
+distribution of quality.
 
 Since I have divided pH into 3 different categories, I want to explore the 
 relationship between quality and those 3 pH categories.
@@ -687,7 +730,8 @@ ggplot(aes(x=density, y = alcohol, color = factor(quality)),
        data =subset(ww, sugar.bucket != "Sweet" &
                       alcohol.bucket != "Medium-High"))+
    geom_point(position = 'jitter')+
-  scale_color_brewer(type = 'div')
+  scale_color_brewer(type = 'seq')+
+  theme_dark()
 ```
 
 Surprisingly, it looks like higher quality wines are concentrated at higher 
@@ -745,7 +789,8 @@ another useful parameter which is the residual sugar.
 ggplot(aes(x= residual.sugar, y = alcohol, color = factor(quality)), 
        data =no_sweet_medium_high)+
    geom_point(position = 'jitter')+
-  scale_color_brewer(type = 'div')
+  scale_color_brewer(type = 'seq')+
+  theme_dark()
 ```
 
 It looks likes white wines with high alcohol and low residual sugar will more
@@ -758,7 +803,8 @@ sugar and quality.
 ggplot(aes(x=alcohol, y = residual.sugar, color = factor(quality)), 
        data =subset(no_sweet_medium_high, alcohol_11 == "<=11"))+
    geom_point(position = 'jitter')+
-  scale_color_brewer(type = 'div')
+  scale_color_brewer(type = 'seq')+
+  theme_dark()
 ```
 
 From the plot, it seems like taking away the effect of alcohol, there seems to 
@@ -812,6 +858,7 @@ to Medium Quality wine.
 pred_ww <- predict(fit_ww, ww, type = "class") # predict on test data
 table(pred_ww, ww$quality.bucket)
 ```
+
 ```{r echo=FALSE, Multivariate_Plot17}
 Accurate_ww <- (919+1448+222)*100/length(ww$quality.bucket)
 Accurate_ww
@@ -865,10 +912,13 @@ decision tree for my dataset:
 
 ### Plot One
 ```{r echo=FALSE, Plot_One}
-qplot(x=quality, data = ww, binwidth = 1,  main = "Wine Quality Distribution", 
-      xlab="Quality Score", ylab="Number of White Wines")+
-  scale_x_continuous(breaks = seq(0,10,1))+
+ggplot(aes(x=factor(quality)), data = ww)+
+  geom_bar()+
+  labs(title = "Wine Quality Distribution")+
+  xlab("Quality Score")+
+  ylab("Number of White Wines")+
   theme(plot.title = element_text(hjust = 0.5))
+
 ```
 
 ### Description One
@@ -879,12 +929,18 @@ concentrated at quality socre of 6.
 
 ### Plot Two
 ```{r echo=FALSE, Plot_Two}
-ggplot(aes(x=density, y = alcohol, color = factor(quality)), data = ww)+
-   geom_point(position = 'jitter')+
-  scale_color_brewer(type = 'div')+
-  labs(title = "Quality by Density and Quality Score", color = "Quality")+
+ggplot(aes(x=density, y = alcohol, color = quality.bucket), data = ww)+
+  coord_cartesian(xlim = c(0.985, 1.002),
+                  ylim = c(7.5, 15))+
+  geom_point(position = 'jitter')+
+  geom_smooth(method = 'lm')+
+  scale_x_continuous(breaks = seq(0.985, 1.002, 0.002))+
+  scale_color_brewer(type = 'seq')+
+  theme_dark()+
+  labs(title = "Relationship of Density vs Alcohol with colored quality levels", 
+       color = "Quality levels")+
   xlab("Density (g/dm^3)")+
-  ylab("Alcohol Concentration (%)")+
+  ylab("Alcohol (% by volume)")+
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
