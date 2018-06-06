@@ -1,0 +1,950 @@
+White wine quality by Linh_Mai
+========================================================
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# Load all of the packages that you end up using in your analysis in this code
+# chunk.
+library(ggplot2)
+library(GGally)
+library(scales)
+library(memisc)
+library(lattice)
+library(gridExtra)
+library(dplyr)
+library(rpart)
+library(rpart.plot)
+# Notice that the parameter "echo" was set to FALSE for this code chunk. This
+# prevents the code from displaying in the knitted HTML output. You should set
+# echo=FALSE for all code chunks in your file, unless it makes sense for your
+# report to show the code that generated a particular plot.
+
+# The other parameters for "message" and "warning" should also be set to FALSE
+# for other code chunks once you have verified that each plot comes out as you
+# want it to. This will clean up the flow of your report.
+
+```
+
+```{r echo=FALSE, Load_the_Data}
+# Load the Data
+ww <- read.csv('wineQualityWhites.csv')
+```
+
+This report explores a dataset containing approximately 4,900 different white 
+wines' quality (rating) and attributes.
+
+# Univariate Plots Section
+
+```{r echo=FALSE, Univariate_Plot1}
+str(ww)
+```
+
+This dataset consists of twelve variables with almost 4,900 observations. The 
+variable x won't be considered in this because it's just the wine's ID, not an 
+attribute to the quality.
+
+```{r echo=FALSE, Univariate_Plot2}
+summary(ww)
+```
+
+The histogram for different qualities. 
+
+```{r echo=FALSE, Univariate_Plot3}
+qplot(x=quality, data = ww, binwidth = 1)+
+  scale_x_continuous(breaks = seq(0,10,1))
+```
+
+The histograms shows that most of the white wines are rated from 5-7. Quality 9 
+has the least count, following by quality 3 and quality 4.
+
+```{r echo=FALSE, Univariate_Plot4}
+summary(ww$quality)
+```
+
+About half of the white wines scores a quality of 5-6.
+
+The histogram for fixed acidity and volatile acidity. 
+
+```{r echo=FALSE, Univariate_Plot5}
+p1 <- qplot(x=fixed.acidity, data = ww, binwidth = 0.5)+
+  scale_x_continuous(breaks = seq(3, 15, 1))
+p2 <- qplot(x = volatile.acidity, data = ww, binwidth = 0.05)+
+  scale_x_continuous(breaks = seq(0, 0.9, 0.1))
+p3 <- qplot (x = citric.acid, data = ww, binwidth = 0.1)+
+   scale_x_continuous(breaks = seq(0, 1.7, 0.1))
+grid.arrange(p1, p2, p3, ncol = 1)
+```
+
+Most of the white wines have a fixed acity of 6.5-7.5 g/dm^3, a volatile acidity 
+of 0.2-0.3 g/dm^3, and a citric acidity of 0.2-0.5 g/dm^3. All three histograms 
+for acidity are skewed to the left. 
+
+The histogram for residual sugar and density 
+
+```{r echo=FALSE, Univariate_Plot6}
+p4 <- qplot(x=residual.sugar, data = ww, binwidth = 0.5)
+p5 <- qplot(x=residual.sugar, data = ww, binwidth = 0.1)+
+  scale_x_continuous(limits = c(0, 20), breaks = seq(0, 20, 1))
+p6 <- qplot(x = density, data = ww, binwidth = 0.001)+
+  scale_x_continuous(breaks = seq(0.97, 1.04, 0.005))
+grid.arrange(p4, p5, p6, ncol = 1)
+```
+
+The histogram for residual sugar is skewed to the left significantly. The 
+zoomed-in histogram shows that most of white wines having residual sugar less
+than 2g/dm^3. For the density, most of the white wines have density of 
+0.992-0.995 g/cm^3. The density looks normally distributed with some outliers 
+to the left.
+
+According to Wine Folly that the cheaper wine has higher sugar, I wonder if the 
+amound of sugar affects the quality of white wines. I put them in different 
+categories as in Wine Folly article.
+
+Distribution of white wines with low residual sugar.
+
+```{r echo=FALSE, Univariate_Plot7}
+qplot(x= quality, data = subset(ww, ww$residual.sugar <= 1), binwidth = 1)
+```
+
+Most of the wines with lowe residual sugar get the quality of 5-6 but none with 
+quality 9.
+
+Distribution of white wines with high residual sugar:
+
+```{r echo=FALSE, Univariate_Plot8}
+qplot(x= quality, data = subset(ww, ww$residual.sugar > 35), binwidth = 1)+
+  scale_x_continuous(limits = c(5, 7))
+```
+
+Interestingly, the high residual sugar white wines all have the quality of 6.
+
+Histogram of white wines with residual sugar of 2-10 g/dm^3:
+
+```{r echo=FALSE, Univariate_Plot9}
+qplot(x= quality, 
+      data = subset(ww, ww$residual.sugar >1 & ww$residual.sugar <= 2), 
+      binwidth = 1)
+```
+
+Histogram of white wines with residual sugar of 2-10 g/dm^3:
+
+```{r echo=FALSE, Univariate_Plot10}
+qplot(x= quality, 
+      data = subset(ww, ww$residual.sugar >2 & ww$residual.sugar < 10), 
+      binwidth = 1)
+```
+
+Histogram of white wines with residual sugar of 10-35 g/dm^3:
+
+```{r echo=FALSE, Univariate_Plot11}
+qplot(x= quality, 
+      data = subset(ww, ww$residual.sugar > 10 & ww$residual.sugar <=35), 
+      binwidth = 1)
+```
+
+Based on this, majority of white wine with medium residual sugar still have 
+quality of 6. However, it looks like the white wines with residual sugar between
+1 and 10 g/dm^3 has more counts on quality 7-8 more while wines with residual 
+sugar between 10 and 35 g/dm^3 have more counts on quality 5. Since white wines 
+with residual sugar interval of (1, 2] and (2, 10] have the same distribution, 
+I will group them together just like the sweet categories in Wine Folly:
+*Bone Dry: < 1 g residual sugar/dm^3
+*Dry: (1,10] g residual sugar/dm^3
+*Off-dry: (10-35] g residual sugar/dm^3
+*Sweet: >35 g residual sugar/dm^3
+
+
+The histogram for chlorides and sulphates:
+
+```{r echo=FALSE, Univariate_Plot12}
+ww$sugar.bucket <- cut(ww$residual.sugar, breaks = c(0, 1, 10, 35, 70), 
+                       labels = c("Bone Dry", "Dry", "Off-Dry", "Sweet"))
+p7 <- qplot(x=chlorides, data = ww, binwidth = 0.01)+
+  scale_x_continuous(breaks = seq(0, 0.3, 0.05))
+p8 <- qplot(x=sulphates, data = ww, binwidth = 0.05)+
+  scale_x_continuous(breaks = seq(0.2, 1.0, 0.1))
+grid.arrange(p7, p8, ncol = 1)
+```
+
+Chlorides is skewed to the left, with most of the chlorides stays less than 
+0.05 g/dm^3. For sulphates residual, most white wines have about 0.4-0.5 g/dm^3.
+
+```{r echo=FALSE, Univariate_Plot13}
+qplot(x=chlorides, data = ww, binwidth = 0.01)+
+  scale_x_continuous(limits = c(0, 0.1), breaks = seq(0, 0.1, 0.01))
+```
+
+The modified histogram of chlorides shows that majority of white wines has the 
+chlorides concentration of 0.03-0.05 g/dm^3.
+
+Histogram of white wine with chlorides below 0.05 g/dm^3:
+
+```{r echo=FALSE, Univariate_Plot14}
+qplot(x=quality, data = subset(ww, chlorides <= 0.05), binwidth = 1)
+```
+
+Histogram of white wine with chlorides above 0.05 g/dm^3
+
+```{r echo=FALSE, Univariate_Plot15}
+qplot(x=quality, data = subset(ww, chlorides > 0.05), binwidth = 1)
+
+```
+
+When the chlorides level goes past 0.05 g/dm^3, it affects the quality. None of 
+the white wines with chlorides level above 0.05 g/dm^3 achieves quality of 9 and 
+the mode for high chlorides is 5 instead of 6. 
+
+The histogram for free sulfur dioxide and total sulfur dioxide:
+
+```{r echo=FALSE, Univariate_Plot16}
+p9 <- qplot(x=free.sulfur.dioxide, data = ww, binwidth = 5)+
+  scale_x_continuous(breaks = seq(0, 160, 20))
+p10 <- qplot(x=total.sulfur.dioxide, data = ww, binwidth = 10)+
+  scale_x_continuous(breaks = seq(0, 400, 20))
+grid.arrange(p9, p10, ncol = 1)
+```
+
+The histogram for free sulfur dioxide is skewed to the left, with most white 
+wines having the concentration of 20-50 g/dm^3. Total sulfur dioxide has a 
+better normal distribution and most white wines have a total sulfur dioxide of 
+100-160 g/dm^3. Both of the graph shows that they have some outliers on the 
+right.
+
+The histogram for pH:
+
+```{r echo=FALSE, Univariate_Plot17}
+qplot(x=pH, data = ww, binwidth = 0.05)+
+  scale_x_continuous(breaks = seq(2.5, 4, 0.1))
+```
+
+The histogram for pH looks normally distributed and shows that most white wines
+have the pH of 3.1-3.2.
+
+As Wine Folly suggested, I divided the white wine into three different 
+categories based on their pH:
+*Light-bodied White: pH < 3.1
+*Red and White Wine: pH 3.1-3.5
+*Low Acid Red Wines: pH > 3.5
+
+```{r echo=FALSE, Univariate_Plot18}
+ww$pH.bucket <- cut(ww$pH, breaks = c(2.7, 3.1, 3.5, 3.9), 
+                    labels = c("Light-bodied White", "Red and White Wines", 
+                               "Low Acid Red Wines"))
+qplot(x=pH.bucket, data = ww)
+```
+
+```{r echo=FALSE, Univariate_Plot19}
+qplot(x=quality, data = ww, binwidth = 1)+
+  facet_wrap(~pH.bucket, scales = 'free')
+```
+
+After breaking pH into different categories, I noticed that only wine with pH 
+between 3.1-3.5 (red and white wine) can get the quality of 9. And the mode for 
+all three pH categories is 6.
+
+Histogram of alcohol:
+
+```{r echo=FALSE, Univariate_Plot20}
+qplot(x=alcohol, data = ww)
+```
+
+The histogram of alcohol is bimodal or multi-modals with 2-3 peaks. However, it 
+looks like most white wines have the alcohol content of 9-11%. Because the 
+alcohol histogram is multi-modals, it might be easier to break down the alcohol 
+content to multiple category or groups to make the investigation easier. I 
+divided the white wines into 4 categories based on their alcohol concentration:
+*Low: Alcohol Concentration < 10%
+*Medium-Low: Alcohol Concentration 10-11.5%
+*Medium: Alcohol Concentration 11.5-13.5%
+*Medium-High: Alcohol Concentration > 13.5%
+
+```{r echo=FALSE, Univariate_Plot21}
+ww$alcohol.bucket<- cut(ww$alcohol, breaks = c (7.9, 10, 11.5, 13.5, 14.3), 
+                        labels = c("Low", "Medium-Low", "Medium", 
+                                   "Medium-High"))
+qplot(x=alcohol.bucket, data = ww)
+```
+
+```{r echo=FALSE, Univariate_Plot22}
+summary(ww$alcohol.bucket)
+```
+
+Most of white wines are low alcohol or medium-low alcohol. About half of white 
+wines are low-alcohol.
+
+Histogram of Low Alcohol White Wines.
+
+```{r echo=FALSE, Univariate_Plot23}
+qplot(x=quality, data = subset(ww, alcohol.bucket == "Low"), binwidth = 1)
+```
+
+Histogram of Medium-High Alcohol.
+
+```{r echo=FALSE, Univariate_Plot24}
+qplot(x=quality, data = subset(ww, alcohol.bucket == "Medium-High"),
+      binwidth = 1)
+```
+
+Surprising, even though most of the white wines are low alcohol content, none of 
+them receives a quality of 9. For medium-high alcohol white wines, even though 
+none gets quality of 9, the lowest quality for this category is 5. It shows that
+low alcohol concentration correlate with lower quality. I'm curious how 
+medium-low and medium alcohol concentration affect quality.
+
+Histogram of medium-low alcohol.
+
+```{r echo=FALSE, Univariate_Plot25}
+qplot(x=quality, data = subset(ww, alcohol.bucket == "Medium-Low"), 
+      binwidth = 1)
+```
+
+Histogram of medium alcohol.
+
+```{r echo=FALSE, Univariate_Plot26}
+qplot(x=quality, data = subset(ww, alcohol.bucket == "Medium"), binwidth = 1)
+```
+
+Even though quality 6 is the mode for both categories, only medium alcohol 
+white wines gets quality 9 and it also has more counts for quality 7 and 8 
+compared to 
+low-medium alcohol.
+
+# Univariate Analysis
+
+###What is the structure of your dataset?
+
+There are 4898 obs. of  12 features (fixed acidity, volatile acidity, citric 
+acid, residual sugar, chlorides, free sulfur dioxide, total sulfur dioxide, 
+density, pH, sulphates, alcohol, quality). 
+
+Other observations:
+*About half of the white wines get the quality of 5 or 6.
+*Most of white wines having residual sugar < 2g/dm^3.
+*Most of the white wines have density of 0.992-0.995 g/cm^3.
+*The histogram of alcohol is bimodal or multi-modals with 2-3 peaks.
+*The minimum quality of White wines with medium-high alcohol concentration is 5
+*Only dry and off-dry wines get a quality of 9
+*All sweet wines score a quality 6.
+*All wines with quality 9 are medium alcohol concentration.
+*Only wine with pH 3.1-3.5 got quality 9
+
+###What is/are the main feature(s) of interest in your dataset?
+
+The main features in the data set are alcohol concentration and quality. I'd 
+like to determine which features affects the quality of white wines. I suspect 
+alcohol concentration and some combination of other variables can be used to 
+build a model to predict which wine has the best quality or the worst quality.
+
+###What other features in the dataset do you think will help support your \
+investigation into your feature(s) of interest?
+
+Alcohol, residual sugar,and pH likely to contribute to the quality of white 
+wines. I think alcohol and residual sugar will contribute most to the quality of 
+white wines after researching about wines quality.
+
+###Did you create any new variables from existing variables in the dataset?
+
+I create the categorical variable for alcohol content because its histogram is 
+multi-modal. It will helps to make it easier investigate and shows me some 
+interesting facts about the relationship between alcohol and quality. Low 
+alcohol white wines doesn't have any quality 9 while high-medium white wines' 
+minimum quality is 5 even though it doesn't get any quality 9. I can say from 
+this observation that, alcohol content > 10% more likely to get a quality of 
+5 or above.
+
+I create the categorical variables for residual sugar based on what Wine Folly 
+recommended. The sweet categories will take care of the outliers on the right 
+sides. Also, the distribution of quality for wines with residual sugar between 
+1 and 10 g/dm^3 have the same distribution. Thus, I decided to group them 
+together in "Dry" group. It actually shows that all wines with quality of 9 
+have the residual sugar between 1-35 g/dm^3. All sweet wines (residual sugar 
+greater than 35g/dm^3) score a quality of 6.
+
+I also divided white wines into three different categories based on their pH 
+levels as Wine Folly suggested: Light-bodied White (pH < 3.1), Red and White 
+Wine (pH 3.1-3.5), and Low Acid Red Wines (pH > 3.5).
+
+###Of the features you investigated, were there any unusual distributions? \ 
+Did you perform any operations on the data to tidy, adjust, or change the form \
+of the data? If so, why did you do this?
+
+The residual sugar histogram is significantly left-skewed. I have to transform 
+it by limiting the residual sugar upper limit to 20 g/dm^3. It shows that most 
+of the residual sugars in white wines is between 1 g/dm^3 and 2 g/dm^3.
+
+The distribution of alcohol concentration is multimodal so I decided to 
+categorize it to clean the data better. The histogram of different alcohol 
+concentration levels summarized the data better and makes it easier to look. 
+Majority of white wines are "Low" or "Medium-low" in alcohol concentration 
+levels.
+
+# Bivariate Plots Section
+
+```{r echo=FALSE, Bivariate_Plot1}
+wine <- ww[, 2:13]
+cor(wine)
+```
+
+The density is correlated strongly with residual sugar and alcohol content. pH 
+and fixed acidity is correlated weakly with each other. For quality, alcohol 
+and quality is correlated weakly. The reason for that may be that the 
+medium-high alcohol content don't get any quality 9.
+
+I use a sample 10,0000 to create the correlation plot.
+
+```{r echo=FALSE, Bivariate_Plot2}
+set.seed(20022012)
+whitewine_samp <- wine[sample(1:length(ww$quality), 1000),]
+ggpairs(whitewine_samp,
+        lower = list(continuous = wrap("points", shape = I('.'))),
+        upper = list(combo = wrap("box", outlier.shape = I('.'))))
+```
+
+Since the density seems to correlate with residual sugar and alcohol, I want to 
+explore their relationship and find a predictive model between those variables.
+
+The density vs residual sugar
+
+```{r echo=FALSE, Bivariate_Plot3}
+ggplot(aes(x=residual.sugar, y=density), data=ww)+
+  geom_point()+
+  geom_smooth(method='lm', color = 'red')
+```
+```{r echo=FALSE, Bivariate_Plot4}
+m1 <- lm(I(density) ~ I(residual.sugar), data = ww)
+summary(m1)
+```
+
+Density vs alcohol content
+
+```{r echo=FALSE, Bivariate_Plot5}
+ggplot(aes(x=alcohol, y=density), data=ww)+
+  geom_point()+
+  geom_smooth(method='lm', color = 'red')
+```
+
+```{r echo=FALSE, Bivariate_Plot6}
+m2 <- lm(I(density) ~ I(alcohol), data = ww)
+summary(m2)
+```
+
+Both plots show that there is a significant outlier with the density value of
+1.039 g/dm^3. I'm curious about what will happen to the R^2 value if I remove 
+that outlier.
+
+```{r echo=FALSE, Bivariate_Plot7}
+m3 <- lm(I(density) ~ I(residual.sugar), data = subset(ww, density < 1.03))
+summary(m3)
+```
+
+The R^2 actually is worse than before after I removing the outlier. So I think 
+I should keep it with the data set. Let's see what happens for alcohol vs 
+density plot.
+
+```{r echo=FALSE, Bivariate_Plot8}
+m4 <- lm(I(density) ~ I(alcohol), data = subset(ww, density < 1.03))
+summary(m4)
+```
+
+For alcohol vs density case, it actually makes the R^2 coefficient better so 
+it's better to remove it from the data set because it's obviously an outlier.
+
+Let's explore the relationship between alcohol and residual sugar.
+
+The density vs residual sugar
+
+```{r echo=FALSE, Bivariate_Plot9}
+ggplot(aes(x=residual.sugar, y=alcohol), data=ww)+
+  geom_point()+
+  geom_smooth(method='lm', color = 'red')
+```
+
+```{r echo=FALSE, Bivariate_Plot10}
+m5 <- lm(I(residual.sugar) ~ I(alcohol), data = ww)
+summary(m5)
+```
+
+Now I want to see alcohol and quality relationship.
+
+```{r echo=FALSE, Bivariate_Plot11}
+ggplot(aes(x=alcohol, y=quality), data=ww)+
+  geom_jitter()+
+  geom_smooth(method='lm', color = 'red')
+```
+
+```{r echo=FALSE, Bivariate_Plot12}
+m6 <- lm(I(alcohol) ~ I(quality), data = ww)
+summary(m6)
+```
+
+From the graph, the regression correlation between alcohol and quality is weak, 
+so I will explore their relationship another way, using boxplot.
+
+```{r echo=FALSE, Bivariate_Plot13}
+ggplot(aes(x=alcohol.bucket, y=quality), data=ww)+
+  geom_boxplot()
+```
+
+```{r echo=FALSE, Bivariate_Plot14}
+by(ww$quality, ww$alcohol.bucket, summary)
+```
+
+Based on this, we can see the mean is increasing as the alcohol increases. 
+However, we can still see some outliers and also medium-low and medium alcohol 
+have the same median. If an alcohol is either low or medium-high alcohol, it 
+won't get quality 9. And if it's medium-high alcohol, the quality for the wine 
+will be between 5-8.
+
+I want to explore and see the relationship between alcohol and quality in each 
+alcohol bucket. 
+
+```{r echo=FALSE, Bivariate_Plot15}
+ggplot(aes(x=alcohol, y=quality), data=ww)+
+  geom_jitter(alpha = 1/5)+
+  geom_smooth(method='lm', color = 'red')+
+  facet_wrap(~alcohol.bucket, scales = 'free')
+```
+
+```{r echo=FALSE, Bivariate_Plot16}
+
+m7 <- lm(I(alcohol) ~ I(quality), 
+         data = subset(ww, alcohol.bucket == "Medium-High"))
+summary(m7)
+```
+
+Based on the plots, even when I group the data set based on the alcohol bucket, 
+the correlation between alcohol and quality doesn't seem really strong based on
+the R^2 value. However, alcohol is the variables that correlates the strongest
+with quality so far.
+
+Now I want to see the relationship between residual sugar and quality.
+
+```{r echo=FALSE, Bivariate_Plot17}
+ggplot(aes(x=residual.sugar, y=quality), data=ww)+
+  geom_point()+
+  geom_smooth(method='lm', color = 'red')
+```
+
+Since the quality is integer so the graph looks like the series of lines. I want 
+to create a bit of noise with jittery but also reduces the noise a bit with 
+alpha to see the pattern better.
+
+```{r echo=FALSE, Bivariate_Plot18}
+ggplot(aes(x=residual.sugar, y=quality), data=ww)+
+  geom_jitter(alpha = 1/5)+
+  geom_smooth(method='lm', color = 'red')
+```
+
+The graph shows that there are no linear relationship between residual sugar 
+and quality. Let's explore their relationship with boxplot.
+
+```{r echo=FALSE, Bivariate_Plot19}
+ggplot(aes(x=sugar.bucket, y=quality), data=ww)+
+  geom_boxplot()
+```
+
+```{r echo=FALSE, Bivariate_Plot20}
+by(ww$quality, ww$sugar.bucket, summary)
+```
+
+I can see that for sweet category, all wines receive quality of 6 and for bone 
+dry, none has quality of 9. However, the dry and off-dry has a same boxplot. 
+The summary shows that, the dry wines has a higher mean quality than off-dry. 
+I want to explore more how sugar and alcohol are related.
+
+Let's explore more variables that have a small correlation with quality such as 
+volatile acidity, chlorides, and density.
+
+```{r echo=FALSE, Bivariate_Plot21}
+ggplot(aes(x=volatile.acidity, y=quality), data=ww)+
+  geom_jitter(alpha = 1/5)+
+  geom_smooth(method='lm', color = 'red')
+```
+
+```{r echo=FALSE, Bivariate_Plot22}
+ggplot(aes(x=chlorides, y=quality), data=ww)+
+  geom_jitter(alpha = 1/5)+
+  geom_smooth(method='lm', color = 'red')
+```
+
+```{r echo=FALSE, Bivariate_Plot23}
+ggplot(aes(x=density, y=quality), data=ww)+
+  geom_jitter(alpha = 1/5)+
+  geom_smooth(method='lm', color = 'red')
+```
+
+I can see clearly that quality is not correlated strongly with volatile acidity,
+chlorides, or density.The data was too clustered around quality of 5-7 due to 
+the unbalanced distribution of quality.
+
+Since I have divided pH into 3 different categories, I want to explore the 
+relationship between quality and those 3 pH categories.
+
+```{r echo=FALSE, Bivariate_Plot24}
+ggplot(aes(x=pH.bucket, y=quality), data=ww)+
+  geom_boxplot()
+```
+
+```{r echo=FALSE, Bivariate_Plot25}
+by(ww$quality, ww$pH.bucket, summary)
+```
+
+# Bivariate Analysis
+
+###Talk about some of the relationships you observed in this part of the \
+investigation. How did the feature(s) of interest vary with other features in \ 
+the dataset?
+
+The quality median and mean increases as the alcohol bucket increases. The 
+median for medium-high alcohol concentration white wines is the highest. However 
+the alcohol itself doesn't correlate strongly with quality. It's due to the fact
+that only medium-low and medium alcohol concentration receive the highest 
+quality of 9. The maximum quality for the highest alcohol concentration group
+(medium-high) is 9.
+
+There is no correlation between sugar bucket and the quality. All sugar buckets 
+have the same median. Interestingly, all sweet wines get a quality of 6. All
+wines that get quality of 9 are dry or off-dry.
+
+The low acid wines have the highest quality mean. As the pH bucket increases, 
+the quality mean also increases but the median still stays the same. Similar to 
+alcohol bucket and sugar bucket, the center bucket (red&white wines) is the 
+only group getting quality of 9.
+
+
+###Did you observe any interesting relationships between the other features
+(not the main feature(s) of interest)?
+
+Density and residual sugar are correlated moderately with the R^2 value of 
+0.7039. As the residual sugar increases, the density also increases.
+
+Alcohol concentration and density are also correlated moderately with the R^2 
+value of 0.6086. However, after I removed the outliers at the density value of
+1.039 g/dm^3, the R^2 value improves to 0.643.
+
+###What was the strongest relationship you found?
+
+*The strongest relationship I have found right now is between dendisty and 
+residual sugar.
+*For the main features, the strongest relationship is between the alcohol and 
+quality but not strongly. I want to use alcohol bucket, sugar bucket and pH 
+bucket to find a model to predict the worst and best wine.
+
+# Multivariate Plots Section
+
+Because I suspected there is a relationship between alcohol and quality, I want
+to see if their relationship will be more prominent if I divided white wines 
+into their respective sugar categories.
+
+```{r echo=FALSE, Multivariate_Plot1}
+ggplot(aes(x=alcohol, y = quality, color = sugar.bucket), data =ww)+
+  geom_jitter(alpha = 1/5)+
+  scale_color_brewer(type = 'div')
+```
+
+As seen before, all sweet white wines have quality of 6. But it looks like 
+alcohol and quality is weakly correlated for dry white wines. Let's see the 
+correlation coefficient for dry, off-dry, and bone-dry wines. Let's plot them
+in boxplot instead.
+
+```{r echo=FALSE, Multivariate_Plot2}
+ggplot(aes(x=alcohol.bucket, y = quality), data =ww)+
+  geom_boxplot()+
+  facet_wrap(~sugar.bucket)
+```
+
+The boxplot gives me another piece of information. There are some groups that 
+can guarantee that it won't get low rating at 3 or 4:
+*Medium-High Alcohol White Wines have the quality >=5
+*Off-dry white wines with medium alcohol concentration have the quality of 5-8.
+
+Even though I found that pH bucket and quality are not correlated strongly, 
+I want to see if combining pH buckets into the graph can give us a better 
+methology to differentiate between best and worst white wines.
+
+```{r echo=FALSE, Multivariate_Plot3}
+ggplot(aes(x=alcohol, y = quality, color = pH.bucket), data =ww)+
+  geom_jitter(alpha = 1/5)+
+  facet_wrap(~sugar.bucket)
+```
+
+```{r echo=FALSE, Multivariate_Plot4}
+ggplot(aes(x=alcohol.bucket, y = quality, color = pH.bucket), data =ww)+
+  geom_boxplot()+
+  facet_wrap(~sugar.bucket)
+```
+
+As expected, pH bucket doesn't give us any new information. I need to find 
+another way to differentiate worst wines from good wines.  I will exclude sweet 
+white wines and medium-high alcohol white wines because we know that they will 
+give us good wine with quality greater than 5.Since alcohol and density are 
+correlated relatively strongly, I want to graph density versus alcohol and use 
+color to differentiate different quality. Let's see if we can see any new 
+pattern to find a good white wines and to avoid bad wines.
+
+```{r echo=FALSE, Multivariate_Plot5}
+ggplot(aes(x=density, y = alcohol, color = factor(quality)), 
+       data =subset(ww, sugar.bucket != "Sweet" &
+                      alcohol.bucket != "Medium-High"))+
+   geom_point(position = 'jitter')+
+  scale_color_brewer(type = 'div')
+```
+
+Surprisingly, it looks like higher quality wines are concentrated at higher 
+alcohol and lower density. Let's see if I can put some number for quality and 
+density that divide good and bad wines.
+
+```{r echo=FALSE, Multivariate_Plot6}
+no_sweet_medium_high <- subset(ww, sugar.bucket != "Sweet" & 
+                                 alcohol.bucket != "Medium-High")
+by(no_sweet_medium_high$alcohol, no_sweet_medium_high$quality, summary)
+```
+
+The table looks like most of white wines that have quality of 3-5 have the 
+alcohol concentration less 11%. I also noticed that the majority of quality 7-9
+has the alcohol concentration greater than 11%. Let's makes a histogram to see 
+if the alcohol concentration less than 11%, the wine most likely to receive low
+quality rating of 3-5
+
+```{r echo=FALSE, Multivariate_Plot7}
+no_sweet_medium_high$alcohol_11 <- cut(no_sweet_medium_high$alcohol, 
+                                       breaks = c(7.9, 11, 14.3), 
+                                       labels = c("<=11", ">11"))
+qplot(x=quality, color = alcohol_11, fill = alcohol_11, 
+      data = no_sweet_medium_high, binwidth = 1)
+```
+
+```{r echo=FALSE, Multivariate_Plot8}
+with(no_sweet_medium_high, table(quality, alcohol_11))
+```
+
+The table and the graph shows that when the alcohol > 11%, white wines most 
+likely get high quality score (7-9). However, I can't say the opposite way that 
+when the alcohol < 11%, white wines most likely to get low quality score (3-5) 
+because there are big junk of white wines got the quality score of 6 when the 
+alcohol content is less or equal to 11%. I want to explore more to see if 
+density will help to narrow the choice more since I noticed that lower density 
+white wines has the higher the quality it will get based on the plot.
+
+```{r echo=FALSE, Multivariate_Plot9}
+ggplot(aes(x= factor (quality), y = density), 
+       data = subset(no_sweet_medium_high, alcohol_11 == "<=11"))+
+  geom_boxplot()
+```
+
+```{r echo=FALSE, Multivariate_Plot10}
+by(subset(no_sweet_medium_high, alcohol_11 == "<=11")$density, 
+   subset(no_sweet_medium_high, alcohol_11 == "<=11")$quality, summary)
+```
+
+Based on the boxplot, there is no definite number for density that can help us
+classify which white wine is good and which one is bad. So I want to explore 
+another useful parameter which is the residual sugar.
+
+```{r echo=FALSE, Multivariate_Plot11}
+ggplot(aes(x= residual.sugar, y = alcohol, color = factor(quality)), 
+       data =no_sweet_medium_high)+
+   geom_point(position = 'jitter')+
+  scale_color_brewer(type = 'div')
+```
+
+It looks likes white wines with high alcohol and low residual sugar will more
+likely to get high quality rating. However, I wonder if it's just an artifact
+from the relationship between alcohol and quality. Let's remove all the white 
+wines with alcohol concentration > 11% to see the relationship between residual
+sugar and quality.
+
+```{r echo=FALSE, Multivariate_Plot12}
+ggplot(aes(x=alcohol, y = residual.sugar, color = factor(quality)), 
+       data =subset(no_sweet_medium_high, alcohol_11 == "<=11"))+
+   geom_point(position = 'jitter')+
+  scale_color_brewer(type = 'div')
+```
+
+From the plot, it seems like taking away the effect of alcohol, there seems to 
+be not much relationship between residual sugar and alcohol. However, let's 
+explore their relationship more.
+
+```{r echo=FALSE, Multivariate_Plot13}
+ggplot(aes(x= density, y = quality), 
+       data = subset(no_sweet_medium_high,alcohol_11 == "<=11"))+
+  geom_jitter(alpha = 1/5)+
+  facet_wrap(~sugar.bucket)+
+  geom_smooth(method='lm', color = 'red')
+```
+
+```{r echo=FALSE, Multivariate_Plot14}
+m7 <- lm(I(density) ~ I(quality), data = subset(no_sweet_medium_high, alcohol_11 == "<=11" & sugar.bucket == "Dry"))
+summary(m7)
+```
+
+After exploring the plot and the summary table for linear regression, it 
+doesn't look like that both residual sugar and density are not the good 
+parameter to differentiate between good an bad wines for white wines with
+alcohol concentration less than 11%.
+
+Now, let's build the decision tree for this dataset. Even though, there is no
+observed relationship between quality with either density or residual sugar,
+I want to include it in the decision tree to see if they will reveal any 
+interesting relationship that I may miss. I divided the quality into three
+different categories:
+*Low: Quality Score 3-5
+*Medium: Quality score of 6
+*High: Quality score of 7-9
+
+I put quality score of 6 in its own catergories because majority of white wines
+have the quality of 6, so this will help normalizing the quality categories.
+
+```{r echo=FALSE, Multivariate_Plot15}
+ww$quality.bucket <- cut(ww$quality, breaks = c(2, 5, 6, 10), 
+                         labels = c("Low", "Medium","High"))
+fit_ww <- rpart(quality.bucket ~ alcohol + density + residual.sugar,
+  	method="class", data = ww)
+rpart.plot(fit_ww)
+```
+
+The decision tree only used alcohol concentration to classify the quality 
+categories for each wine. I can see that in the Low Quality wine group in the 
+end, there are still about 38% of predicted Low Quality wine actually belongs
+to Medium Quality wine.
+
+```{r echo=FALSE, Multivariate_Plot16}
+pred_ww <- predict(fit_ww, ww, type = "class") # predict on test data
+table(pred_ww, ww$quality.bucket)
+```
+```{r echo=FALSE, Multivariate_Plot17}
+Accurate_ww <- (919+1448+222)*100/length(ww$quality.bucket)
+Accurate_ww
+```
+
+The accuracy for my model is about 53%, which is not too bad for this dataset.
+The R^2 coefficient between quality and alcohol was much lower than that.
+
+# Multivariate Analysis
+
+###Talk about some of the relationships you observed in this part of the \
+investigation. Were there features that strengthened each other in terms of \
+looking at your feature(s) of interest?
+
+Through this investigation, the strongest relationship with quality I have 
+observed is between alcohol concentration and density. There was an interesting
+relationship I found from this plot. White wines with high alcohol concentration
+and low density tend to get high quality score. I can see that relationship
+clearly when plotting alcohol versus density with quality as color.
+
+At first, it looks like low sugar residual white wines will get high quality.
+However, after taking away the effect of alcohol in the graph, it looks like 
+there is no strong correlation between residual sugar and quality.
+
+###Were there any interesting or surprising interactions between features?
+
+Boxplot graph and scatterplot between alcohol and quality don't really give a 
+clear relationship between alcohol and quality. However, when I plot alcohol
+versus density and assign color for different quality scores, the relationship
+between alcohol and quality clearly shows. Most of the high scores concentrates
+at higher alcohol concentration. That is confirmed through the decision tree
+model because the decision tree only takes the alcohol concentration in account
+to assign white wines into their respective quality categories.
+
+It looks like that the higher alcohol concentration a white wine is, the higher
+quality it will get. However, none of the medium-high white wines get the
+quality score of 9.
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the \
+strengths and limitations of your model.
+
+I didn't create any regression model for my dataset. However, I did create a 
+decision tree for my dataset:
+*Low Quality: alcohol concentration < 9.8
+*Medium Quality: 9.8 <= alcohol concentration < 13
+*High Quality: alcohol concentration >=13
+
+------
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, Plot_One}
+qplot(x=quality, data = ww, binwidth = 1,  main = "Wine Quality Distribution", 
+      xlab="Quality Score", ylab="Number of White Wines")+
+  scale_x_continuous(breaks = seq(0,10,1))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### Description One
+I can see the majority of white wines get the quality score of 6. It will make
+it more difficult to predict the quality of white wines using other variables
+because the scatterplot of quality versus other variables will be too
+concentrated at quality socre of 6.
+
+### Plot Two
+```{r echo=FALSE, Plot_Two}
+ggplot(aes(x=density, y = alcohol, color = factor(quality)), data = ww)+
+   geom_point(position = 'jitter')+
+  scale_color_brewer(type = 'div')+
+  labs(title = "Quality by Density and Quality Score", color = "Quality")+
+  xlab("Density (g/dm^3)")+
+  ylab("Alcohol Concentration (%)")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+### Description Two
+This plot shows clearly the relationship between Alcohol Concentration and 
+Quality Score. It looks like the high-alcohol-concentration white wines tend to
+get high quality score. That relationship didn't show up really well in the 
+scatterplot between alcohol concentration and quality.
+
+### Plot Three
+```{r echo=FALSE, Plot_Three}
+rpart.plot(fit_ww, type = 3, 
+           main = "Decision Tree on Quality based on Alcohol Concentration")
+```
+
+### Description Three
+
+The decision clearly shows that alcohol concentration is the main variable that
+affects the quality score. Even though I include density and residual sugar as
+variables in the decision tree, they are not used to divide white wines into 
+their respective quality categories. The accuracy of the decision tree is 53%, 
+which in my opinion is better than regression model. The regression model for 
+quality based on alcohol concentration has a R^2 value of 0.19.
+
+------
+
+# Reflection
+
+The dataset has about 4,900 data points for white wines' quality scores and
+their respective attributes. The data were recoreded in 2009 and the classes
+for quality score is not balanced, with most of the white wines are concentrated
+at quality score of 6. After studying about the relationship between each 
+attributes, I started to see some small correlation between some attributes.
+However, as I explored more on the regression relationship between quality and
+some selected attributes, it looks like their correlationship is not strong.
+Therefore, I decided to make a classification model instead of a regression 
+model.
+
+There are some weak correlation between alcohol concentration and two other
+attributes: quality, density and residual sugar. The strongest regression 
+relationship is between alcohol concentration and density, not between alcohol
+concentration and quality. Since the R^2 value for the regression model
+between alcohol concentration and quality is so low (0.19), it's better to do
+a classification model. However, I don't know between quality, residual sugar,
+and pH, which one affects the quality the most. When I analyze each attribute's
+affect on quality, nothing really stands out until I plot alcohol concentration
+against density and assign color for different quality score. I can see clearly
+that high-alcohol-white-wines tend to have higher quality scores. I started to
+do the same for density and residual sugar; however, I can't see any clear
+correlationship for both attributes.
+
+I use decision tree to make my classification model. I include both density and
+residual sugar in my model so I won't miss out any interesting relationship.
+However, none of them shows up in the decision tree. Alcohol content is the
+main decisive factor in the decision tree. My decision tree has an accuracy of
+53%, which is better than the regression model in my opinion. There are some 
+reasons that cause the low accuracy for both classification and regression
+model:
+*There can be some random effects in the dataset since we don't know if all
+4,900 white wines got rated by the same wine experts or not.
+*Some of the attributes that can affect the white quality are missing such as
+how long the wines were kept in the vault, grape types, and location that the
+wine was made. They can be actually the main attributes of white quality.
